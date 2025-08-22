@@ -6,36 +6,51 @@ const TypingIndicator = ({ state }) => {
   const getIcon = () => {
     switch (state) {
       case 'Understanding':
-        return <Brain className="animate-pulse" size={16} />;
+        return <Brain className="animate-pulse text-orange-400" size={18} />;
       case 'Structuring':
-        return <Zap className="animate-bounce" size={16} />;
+        return <Zap className="animate-bounce text-red-400" size={18} />;
       case 'Typing':
-        return <MessageCircle className="animate-spin" size={16} />;
+        return <MessageCircle className="animate-spin text-orange-500" size={18} />;
       default:
-        return <MessageCircle className="animate-pulse" size={16} />;
+        return <MessageCircle className="animate-pulse text-orange-400" size={18} />;
     }
   };
 
   const getDots = () => (
-    <div className="flex space-x-1 ml-2">
-      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+    <div className="flex space-x-1 ml-3">
+      <div className="w-2 h-2 bg-gradient-to-r from-orange-400 to-red-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+      <div className="w-2 h-2 bg-gradient-to-r from-orange-400 to-red-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+      <div className="w-2 h-2 bg-gradient-to-r from-orange-400 to-red-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
     </div>
   );
 
+  const getStateColor = () => {
+    switch (state) {
+      case 'Understanding':
+        return 'from-orange-500/20 to-red-600/10';
+      case 'Structuring':
+        return 'from-red-500/20 to-orange-600/10';
+      case 'Typing':
+        return 'from-orange-600/20 to-red-500/20';
+      default:
+        return 'from-orange-500/20 to-red-600/10';
+    }
+  };
+
   return (
-    <div className="flex justify-start mb-4">
+    <div className="flex justify-start mb-6">
       <div className="max-w-full">
-        <Card className="bg-gray-800 border-gray-700 p-4">
-          <div className="flex items-center text-gray-400">
-            <div className="text-blue-400 mr-2">
+        <div className={`bg-gradient-to-r ${getStateColor()} backdrop-blur-xl p-5 rounded-2xl shadow-xl transition-all duration-300 transform hover:scale-105`}>
+          <div className="flex items-center text-gray-100">
+            <div className="mr-3 p-2 bg-white/10 rounded-lg backdrop-blur-sm">
               {getIcon()}
             </div>
-            <span className="text-sm font-medium mr-2">{state}</span>
+            <span className="text-sm font-semibold mr-2 bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
+              {state}
+            </span>
             {getDots()}
           </div>
-        </Card>
+        </div>
       </div>
     </div>
   );
