@@ -13,7 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageCircle,
-  MoreVertical
+  MoreVertical,
+  Sparkles
 } from 'lucide-react';
 import { mockApiService, typingStates } from '../utils/mock';
 import MessageBubble from './MessageBubble';
@@ -128,19 +129,29 @@ const ChatInterface = () => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-900 text-white">
+    <div className="flex h-screen bg-black text-white overflow-hidden">
       {/* Sidebar */}
-      <div className={`${sidebarCollapsed ? 'w-16' : 'w-80'} transition-all duration-300 bg-gray-800 border-r border-gray-700 flex flex-col`}>
+      <div className={`${sidebarCollapsed ? 'w-16' : 'w-80'} transition-all duration-500 ease-in-out bg-gradient-to-b from-gray-900 to-black backdrop-blur-xl shadow-2xl flex flex-col relative`}>
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-orange-600/5 to-red-600/5 pointer-events-none"></div>
+        
         {/* Sidebar Header */}
-        <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+        <div className="relative p-6 flex items-center justify-between">
           {!sidebarCollapsed && (
-            <h1 className="text-xl font-semibold">Agentspace Chat</h1>
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
+                Agentspace
+              </h1>
+            </div>
           )}
           <Button 
             variant="ghost" 
             size="icon"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="text-gray-400 hover:text-white"
+            className="text-orange-400 hover:text-white hover:bg-orange-500/20 transition-all duration-300 rounded-xl"
           >
             {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
           </Button>
@@ -148,10 +159,10 @@ const ChatInterface = () => {
 
         {/* New Chat Button */}
         {!sidebarCollapsed && (
-          <div className="p-4">
+          <div className="relative px-6 pb-4">
             <Button 
               onClick={createNewChat}
-              className="w-full bg-gray-700 hover:bg-gray-600 text-white border border-gray-600"
+              className="w-full bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-semibold py-3 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105"
             >
               <Plus size={16} className="mr-2" />
               New Chat
@@ -160,47 +171,49 @@ const ChatInterface = () => {
         )}
 
         {/* Chat History */}
-        <ScrollArea className="flex-1 px-2">
+        <ScrollArea className="flex-1 px-4 relative">
           {!sidebarCollapsed ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {chatRooms.map((room) => (
-                <Card 
+                <div 
                   key={room.id}
-                  className={`p-3 cursor-pointer transition-colors ${
+                  className={`p-4 cursor-pointer transition-all duration-300 rounded-xl backdrop-blur-sm ${
                     currentRoom?.id === room.id 
-                      ? 'bg-gray-700 border-gray-600' 
-                      : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                      ? 'bg-gradient-to-r from-orange-500/20 to-red-600/20 shadow-lg transform scale-105' 
+                      : 'bg-white/5 hover:bg-white/10 hover:transform hover:scale-102'
                   }`}
                   onClick={() => selectChatRoom(room)}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-medium text-white truncate">
+                      <h3 className="text-sm font-semibold text-white truncate mb-1">
                         {room.title}
                       </h3>
-                      <p className="text-xs text-gray-400 mt-1 truncate">
+                      <p className="text-xs text-gray-300 truncate mb-2">
                         {room.lastMessage}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-orange-400 font-medium">
                         {new Date(room.timestamp).toLocaleDateString()}
                       </p>
                     </div>
-                    <Button variant="ghost" size="icon" className="ml-2 h-6 w-6 text-gray-400">
+                    <Button variant="ghost" size="icon" className="ml-2 h-6 w-6 text-gray-400 hover:text-orange-400">
                       <MoreVertical size={12} />
                     </Button>
                   </div>
-                </Card>
+                </div>
               ))}
             </div>
           ) : (
-            <div className="space-y-2 pt-2">
+            <div className="space-y-3 pt-2">
               {chatRooms.map((room) => (
                 <Button
                   key={room.id}
                   variant="ghost"
                   size="icon"
-                  className={`w-12 h-12 ${
-                    currentRoom?.id === room.id ? 'bg-gray-700' : 'hover:bg-gray-700'
+                  className={`w-12 h-12 rounded-xl transition-all duration-300 ${
+                    currentRoom?.id === room.id 
+                      ? 'bg-gradient-to-r from-orange-500/30 to-red-600/30 text-white' 
+                      : 'text-gray-400 hover:bg-white/10 hover:text-orange-400'
                   }`}
                   onClick={() => selectChatRoom(room)}
                 >
@@ -213,17 +226,23 @@ const ChatInterface = () => {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col bg-black relative overflow-hidden">
+        {/* Animated background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900/20 via-black to-red-900/10 pointer-events-none"></div>
+        
         {/* Chat Header */}
-        <div className="p-4 border-b border-gray-700 bg-gray-800">
-          <h2 className="text-lg font-semibold">
-            {currentRoom?.title || 'Select a chat or start a new one'}
-          </h2>
+        <div className="relative p-6 bg-gradient-to-r from-black via-gray-900 to-black backdrop-blur-xl shadow-xl">
+          <div className="flex items-center space-x-4">
+            <div className="w-3 h-3 bg-gradient-to-r from-orange-400 to-red-500 rounded-full animate-pulse"></div>
+            <h2 className="text-xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+              {currentRoom?.title || 'Select a chat or start a new conversation'}
+            </h2>
+          </div>
         </div>
 
         {/* Messages Area */}
-        <ScrollArea className="flex-1 p-4">
-          <div className="max-w-4xl mx-auto space-y-6">
+        <ScrollArea className="flex-1 p-6 relative">
+          <div className="max-w-6xl mx-auto space-y-6">
             {messages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
@@ -237,33 +256,37 @@ const ChatInterface = () => {
         </ScrollArea>
 
         {/* Input Area */}
-        <div className="p-4 border-t border-gray-700 bg-gray-800">
-          <div className="max-w-4xl mx-auto">
+        <div className="relative p-6 bg-gradient-to-r from-black via-gray-900 to-black backdrop-blur-xl shadow-2xl">
+          <div className="max-w-6xl mx-auto">
             {/* File Preview */}
             {selectedFile && (
-              <div className="mb-3 p-3 bg-gray-700 rounded-lg border border-gray-600 flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Paperclip size={16} className="text-gray-400" />
-                  <span className="text-sm text-gray-300">{selectedFile.name}</span>
+              <div className="mb-4 p-4 bg-gradient-to-r from-orange-500/10 to-red-600/10 rounded-xl backdrop-blur-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-600 rounded-lg flex items-center justify-center">
+                      <Paperclip size={14} className="text-white" />
+                    </div>
+                    <span className="text-sm text-gray-200 font-medium">{selectedFile.name}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedFile(null)}
+                    className="text-red-400 hover:text-white hover:bg-red-500/20 rounded-lg"
+                  >
+                    ×
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedFile(null)}
-                  className="text-gray-400 hover:text-white"
-                >
-                  ×
-                </Button>
               </div>
             )}
             
-            <div className="flex items-end space-x-3">
+            <div className="flex items-end space-x-4">
               {/* File Upload */}
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => fileInputRef.current?.click()}
-                className="text-gray-400 hover:text-white"
+                className="text-orange-400 hover:text-white hover:bg-orange-500/20 rounded-xl transition-all duration-300 transform hover:scale-110"
               >
                 <Paperclip size={20} />
               </Button>
@@ -282,7 +305,7 @@ const ChatInterface = () => {
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder="Type your message..."
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 pr-24"
+                  className="bg-gradient-to-r from-gray-800/50 to-gray-900/50 backdrop-blur-sm text-white placeholder-gray-400 pr-24 py-4 text-lg rounded-xl shadow-lg transition-all duration-300 focus:ring-2 focus:ring-orange-500/50 focus:bg-gray-800/70"
                   disabled={isTyping}
                 />
                 
@@ -291,8 +314,10 @@ const ChatInterface = () => {
                   variant="ghost"
                   size="icon"
                   onClick={handleVoiceInput}
-                  className={`absolute right-12 top-1/2 transform -translate-y-1/2 ${
-                    isRecording ? 'text-red-400' : 'text-gray-400 hover:text-white'
+                  className={`absolute right-16 top-1/2 transform -translate-y-1/2 rounded-lg transition-all duration-300 ${
+                    isRecording 
+                      ? 'text-red-400 bg-red-500/20 animate-pulse' 
+                      : 'text-orange-400 hover:text-white hover:bg-orange-500/20'
                   }`}
                 >
                   {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
@@ -302,7 +327,7 @@ const ChatInterface = () => {
                 <Button
                   onClick={sendMessage}
                   disabled={(!inputMessage.trim() && !selectedFile) || isTyping}
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 h-8 w-8 bg-blue-600 hover:bg-blue-700"
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 h-10 w-10 bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 disabled:from-gray-600 disabled:to-gray-700 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-110"
                   size="icon"
                 >
                   <Send size={16} />
