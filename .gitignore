@@ -31,9 +31,11 @@ dist/
 dist
 
 # Environment files (comprehensive coverage)
-
 *token.json*
 *credentials.json*
+# --- ADDED FOR GOOGLE CLOUD ---
+backend/sisl-internal-playground-eb68e48f1725.json
+# ------------------------------
 
 # Logs and debug files
 npm-debug.log*
@@ -77,4 +79,4 @@ agenthub/agents/youtube/db
 .cache/
 
 # Mobile development
-android-sdk/ 
+android-sdk/
