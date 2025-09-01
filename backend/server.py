@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from google.cloud import discoveryengine_v1alpha as discoveryengine
 from google.oauth2 import credentials
-# Import the flow object for the auth code exchange
+# This is the correct library for the server-side OAuth flow
 from google_auth_oauthlib.flow import Flow
 import os
 import logging
@@ -20,12 +20,9 @@ GOOGLE_CLIENT_ID = "1001147206231-afs8ordgj9i3b7n9a65ka5ncamapcnf3.apps.googleus
 GOOGLE_CLIENT_SECRET = "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" # PASTE YOUR CLIENT SECRET HERE
 GOOGLE_REDIRECT_URI = "http://localhost:3000"
 
-PROJECT_ID = "sisl-internal-playground" # Using Project ID for consistency now
+PROJECT_ID = "sisl-internal-playground"
 LOCATION = "global"
-# --- THIS IS THE CORRECTED VARIABLE NAME ---
-ENGINE_ID = "agentspace-hr-assisstant_1753777037202"
-# ---------------------------------------------
-SERVING_CONFIG_ID = "default_search"
+DATA_STORE_ID = "agentspace-hr-assisstant_1753777037202"
 
 # --- FastAPI App & Security ---
 app = FastAPI()
@@ -60,12 +57,22 @@ async def google_auth(auth_request: AuthCodeRequest):
             }
         }
 
+        # --- THE FINAL, CRITICAL FIX IS HERE ---
+        # The scopes list now exactly matches the scopes provided by the frontend library.
         flow = Flow.from_client_config(
             client_config=client_config,
-            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            scopes=[
+                "https://www.googleapis.com/auth/cloud-platform",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
+                "openid"
+            ],
             redirect_uri=GOOGLE_REDIRECT_URI
         )
+        # ----------------------------------------
+
         flow.fetch_token(code=auth_request.code)
+        
         creds = flow.credentials
         return TokenResponse(access_token=creds.token)
         
@@ -77,28 +84,21 @@ async def google_auth(auth_request: AuthCodeRequest):
 async def chat_with_agentspace(chat_request: ChatMessage):
     try:
         user_credentials = credentials.Credentials(token=chat_request.access_token)
-        client = discoveryengine.SearchServiceClient(credentials=user_credentials)
+        client = discoveryengine.ConversationalSearchServiceClient(credentials=user_credentials)
 
-        # Using the corrected ENGINE_ID variable name
-        serving_config_path = (
-            f"projects/{PROJECT_ID}/locations/{LOCATION}/"
-            f"collections/default_collection/engines/{ENGINE_ID}/"
-            f"servingConfigs/{SERVING_CONFIG_ID}"
+        session_path = client.session_path(
+            project=PROJECT_ID, location=LOCATION,
+            data_store=DATA_STORE_ID, session="-"
         )
         
-        request = discoveryengine.SearchRequest(
-            serving_config=serving_config_path,
-            query=chat_request.message,
-            content_search_spec=discoveryengine.SearchRequest.ContentSearchSpec(
-                summary_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec(
-                    summary_result_count=5
-                )
-            )
+        request = discoveryengine.ConverseConversationRequest(
+            name=session_path,
+            query=discoveryengine.TextInput(input=chat_request.message),
         )
         
-        response = client.search(request=request)
+        response = client.converse_conversation(request=request)
         
-        agent_reply = response.summary.summary_text or "Could not generate a summary."
+        agent_reply = response.reply.text or "Could not generate a response."
         return ChatResponse(reply=agent_reply)
         
     except Exception as e:
