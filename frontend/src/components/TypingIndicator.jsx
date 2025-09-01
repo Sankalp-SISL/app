@@ -1,5 +1,4 @@
 import React from 'react';
-import { Card } from './ui/card';
 import { Brain, Zap, MessageCircle } from 'lucide-react';
 
 const TypingIndicator = ({ state }) => {

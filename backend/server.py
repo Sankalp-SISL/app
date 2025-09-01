@@ -1,128 +1,116 @@
-from fastapi import FastAPI, APIRouter, HTTPException
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-from google.cloud.discoveryengine_v1beta import ConversationalSearchServiceClient
-from google.cloud import discoveryengine_v1beta as discoveryengine
+from fastapi import FastAPI, APIRouter, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer
+from google.cloud import discoveryengine_v1alpha as discoveryengine
+from google.oauth2 import credentials
+# Import the flow object for the auth code exchange
+from google_auth_oauthlib.flow import Flow
 import os
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field
-from typing import List, Optional
-import uuid
-from datetime import datetime
+from pydantic import BaseModel
+from typing import Optional
 
+# --- Basic Setup ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+# --- Agentspace & OAuth Configuration ---
+# CRITICAL: These must exactly match your OAuth Client ID configuration
+GOOGLE_CLIENT_ID = "1001147206231-afs8ordgj9i3b7n9a65ka5ncamapcnf3.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = "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" # PASTE YOUR CLIENT SECRET HERE
+GOOGLE_REDIRECT_URI = "http://localhost:3000"
 
-# Agentspace Configuration
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(ROOT_DIR / "sisl-internal-playground-eb68e48f1725.json")
-PROJECT_ID = "sisl-internal-playground"
-PROJECT_NUMBER = "1001147206231"  # Project number from error logs
+PROJECT_ID = "sisl-internal-playground" # Using Project ID for consistency now
 LOCATION = "global"
+# --- THIS IS THE CORRECTED VARIABLE NAME ---
 ENGINE_ID = "agentspace-hr-assisstant_1753777037202"
+# ---------------------------------------------
+SERVING_CONFIG_ID = "default_search"
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
-
-# Create the main app without a prefix
+# --- FastAPI App & Security ---
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+# --- Pydantic Models ---
+class AuthCodeRequest(BaseModel):
+    code: str
 
-# Define Models
-class StatusCheck(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-class StatusCheckCreate(BaseModel):
-    client_name: str
+class TokenResponse(BaseModel):
+    access_token: str
 
 class ChatMessage(BaseModel):
     message: str
-    sessionId: Optional[str] = None
+    access_token: str
 
 class ChatResponse(BaseModel):
     reply: str
-    sessionId: str
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
+# --- API Endpoints ---
+@api_router.post("/auth/google", response_model=TokenResponse)
+async def google_auth(auth_request: AuthCodeRequest):
+    try:
+        client_config = {
+            "web": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [GOOGLE_REDIRECT_URI],
+            }
+        }
+
+        flow = Flow.from_client_config(
+            client_config=client_config,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            redirect_uri=GOOGLE_REDIRECT_URI
+        )
+        flow.fetch_token(code=auth_request.code)
+        creds = flow.credentials
+        return TokenResponse(access_token=creds.token)
+        
+    except Exception as e:
+        logger.error(f"Authentication exchange error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=f"Invalid authorization code or auth config error: {e}")
 
 @api_router.post("/chat", response_model=ChatResponse)
 async def chat_with_agentspace(chat_request: ChatMessage):
     try:
-        user_message = chat_request.message
-        session_id = chat_request.sessionId
-        
-        # Create client to connect to Discovery Engine
-        agentspace_client = ConversationalSearchServiceClient()
-        
-        # Define the conversation name
-        if session_id:
-            # Use existing conversation
-            conversation_name = session_id
-        else:
-            # Auto session mode - creates new conversation
-            conversation_name = f"projects/{PROJECT_NUMBER}/locations/{LOCATION}/collections/default_collection/dataStores/{ENGINE_ID}/conversations/-"
-        
-        # Create a request
-        request_body = discoveryengine.ConverseConversationRequest(
-            name=conversation_name,
-            query=discoveryengine.TextInput(input=user_message),
+        user_credentials = credentials.Credentials(token=chat_request.access_token)
+        client = discoveryengine.SearchServiceClient(credentials=user_credentials)
+
+        # Using the corrected ENGINE_ID variable name
+        serving_config_path = (
+            f"projects/{PROJECT_ID}/locations/{LOCATION}/"
+            f"collections/default_collection/engines/{ENGINE_ID}/"
+            f"servingConfigs/{SERVING_CONFIG_ID}"
         )
-
-        # Send request and get response
-        response = agentspace_client.converse_conversation(request=request_body)
-
-        # Extract response information
-        agent_reply = response.reply.summary.summary_text if response.reply.summary else "No response available"
-        new_session_id = response.conversation.name
-
-        return ChatResponse(reply=agent_reply, sessionId=new_session_id)
+        
+        request = discoveryengine.SearchRequest(
+            serving_config=serving_config_path,
+            query=chat_request.message,
+            content_search_spec=discoveryengine.SearchRequest.ContentSearchSpec(
+                summary_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec(
+                    summary_result_count=5
+                )
+            )
+        )
+        
+        response = client.search(request=request)
+        
+        agent_reply = response.summary.summary_text or "Could not generate a summary."
+        return ChatResponse(reply=agent_reply)
         
     except Exception as e:
-        logger.error(f"Agentspace API error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get response from Agentspace")
+        logger.error(f"Agentspace API error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An error occurred in the backend: {e}")
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.dict()
-    status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.dict())
-    return status_obj
-
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    status_checks = await db.status_checks.find().to_list(1000)
-    return [StatusCheck(**status_check) for status_check in status_checks]
-
-# Include the router in the main app
+# --- Include Router and Middleware ---
 app.include_router(api_router)
-
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
