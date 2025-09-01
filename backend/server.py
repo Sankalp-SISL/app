@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from google.cloud import discoveryengine_v1alpha as discoveryengine
 from google.oauth2 import credentials
-# This is the correct library for the server-side OAuth flow
 from google_auth_oauthlib.flow import Flow
 import os
 import logging
@@ -15,14 +14,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # --- Agentspace & OAuth Configuration ---
-# CRITICAL: These must exactly match your OAuth Client ID configuration
+# CRITICAL: These must exactly match your OAuth Client ID configuration in Google Cloud Console
 GOOGLE_CLIENT_ID = "1001147206231-afs8ordgj9i3b7n9a65ka5ncamapcnf3.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET = "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" # PASTE YOUR CLIENT SECRET HERE
+GOOGLE_CLIENT_SECRET = "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" # PASTE YOUR CLIENT SECRET
 GOOGLE_REDIRECT_URI = "http://localhost:3000"
 
 PROJECT_ID = "sisl-internal-playground"
 LOCATION = "global"
-DATA_STORE_ID = "agentspace-hr-assisstant_1753777037202"
+ENGINE_ID = "agentspace-hr-assisstant_1753777037202"
+SERVING_CONFIG_ID = "default_search"
 
 # --- FastAPI App & Security ---
 app = FastAPI()
@@ -44,6 +44,7 @@ class ChatResponse(BaseModel):
     reply: str
 
 # --- API Endpoints ---
+# This endpoint correctly exchanges the auth code for a user token. It is working.
 @api_router.post("/auth/google", response_model=TokenResponse)
 async def google_auth(auth_request: AuthCodeRequest):
     try:
@@ -56,49 +57,53 @@ async def google_auth(auth_request: AuthCodeRequest):
                 "redirect_uris": [GOOGLE_REDIRECT_URI],
             }
         }
-
-        # --- THE FINAL, CRITICAL FIX IS HERE ---
-        # The scopes list now exactly matches the scopes provided by the frontend library.
         flow = Flow.from_client_config(
             client_config=client_config,
-            scopes=[
-                "https://www.googleapis.com/auth/cloud-platform",
-                "https://www.googleapis.com/auth/userinfo.email",
-                "https://www.googleapis.com/auth/userinfo.profile",
-                "openid"
-            ],
+            scopes=["https://www.googleapis.com/auth/cloud-platform", "openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"],
             redirect_uri=GOOGLE_REDIRECT_URI
         )
-        # ----------------------------------------
-
         flow.fetch_token(code=auth_request.code)
-        
-        creds = flow.credentials
-        return TokenResponse(access_token=creds.token)
-        
+        return TokenResponse(access_token=flow.credentials.token)
     except Exception as e:
         logger.error(f"Authentication exchange error: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=f"Invalid authorization code or auth config error: {e}")
 
+# This endpoint now ONLY uses the SearchServiceClient, which we know exists.
 @api_router.post("/chat", response_model=ChatResponse)
 async def chat_with_agentspace(chat_request: ChatMessage):
     try:
+        # Create credentials directly from the user's access token
         user_credentials = credentials.Credentials(token=chat_request.access_token)
-        client = discoveryengine.ConversationalSearchServiceClient(credentials=user_credentials)
+        
+        # Initialize the SearchServiceClient, authenticated AS THE USER
+        client = discoveryengine.SearchServiceClient(credentials=user_credentials)
 
-        session_path = client.session_path(
-            project=PROJECT_ID, location=LOCATION,
-            data_store=DATA_STORE_ID, session="-"
+        # Manually construct the resource path to avoid helper function bugs
+        serving_config_path = (
+            f"projects/{PROJECT_ID}/locations/{LOCATION}/"
+            f"collections/default_collection/engines/{ENGINE_ID}/"
+            f"servingConfigs/{SERVING_CONFIG_ID}"
         )
         
-        request = discoveryengine.ConverseConversationRequest(
-            name=session_path,
-            query=discoveryengine.TextInput(input=chat_request.message),
+        # Build the SearchRequest that asks for a summary (a generated answer)
+        request = discoveryengine.SearchRequest(
+            serving_config=serving_config_path,
+            query=chat_request.message,
+            content_search_spec=discoveryengine.SearchRequest.ContentSearchSpec(
+                summary_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec(
+                    summary_result_count=5,
+                    include_citations=True
+                )
+            )
         )
         
-        response = client.converse_conversation(request=request)
+        response = client.search(request=request)
         
-        agent_reply = response.reply.text or "Could not generate a response."
+        # The generated answer is in the 'summary' field of the SearchResponse
+        agent_reply = response.summary.summary_text
+        if not agent_reply:
+             agent_reply = "I found some relevant information, but could not generate a summary."
+
         return ChatResponse(reply=agent_reply)
         
     except Exception as e:
@@ -114,3 +119,4 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
